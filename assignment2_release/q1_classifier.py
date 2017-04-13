@@ -83,10 +83,11 @@ class SoftmaxModel(Model):
     """
     ### YOUR CODE HERE
 
-    feed_dict = {
-        self.input_placeholder: input_batch,
-        self.labels_placeholder: label_batch
-    }
+    feed_dict = {self.input_placeholder: input_batch}
+
+    if label_batch is not None:
+        feed_dict[self.labels_placeholder] = label_batch
+
     ### END YOUR CODE
     return feed_dict
 
@@ -110,7 +111,7 @@ class SoftmaxModel(Model):
       train_op: The Op for training.
     """
     ### YOUR CODE HERE
-    raise NotImplementedError
+    train_op = tf.train.GradientDescentOptimizer(learning_rate=self.config.lr).minimize(loss=loss)
     ### END YOUR CODE
     return train_op
 
@@ -134,10 +135,19 @@ class SoftmaxModel(Model):
       out: A tensor of shape (batch_size, n_classes)
     """
     ### YOUR CODE HERE
-    raise NotImplementedError
-    ### END YOUR CODE
-    return out
+    with tf.name_scope('paramters') as scope:
+        weight = tf.get_variable(name='weight',
+                                 initializer=tf.zeros(shape=(input_data.shape[1], self.config.n_classes),
+                                      dtype=tf.float32))
+        bias = tf.get_variable(name='bias',
+                               initializer=tf.zeros(shape=(input_data.shape[0], self.config.n_classes),
+                                    dtype=tf.float32))
 
+        yhat = softmax(tf.matmul(input_data, weight) + bias)
+
+    return yhat
+
+    
   def add_loss_op(self, pred):
     """Adds cross_entropy_loss ops to the computational graph.
 
@@ -149,7 +159,8 @@ class SoftmaxModel(Model):
       loss: A 0-d tensor (scalar)
     """
     ### YOUR CODE HERE
-    raise NotImplementedError
+    loss = cross_entropy_loss(self.labels_placeholder, pred)
+
     ### END YOUR CODE
     return loss
 
