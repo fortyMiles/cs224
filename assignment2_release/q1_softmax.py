@@ -55,28 +55,9 @@ def cross_entropy_loss(y, yhat):
           tensor in the problem.
   """
   ### YOUR CODE HERE
-  raise NotImplementedError
+
+  out = -tf.reduce_sum(tf.cast(y, dtype=tf.float32) * tf.log(yhat), axis=0)
+  out = tf.reduce_sum(out)
   ### END YOUR CODE
   return out
 
-
-def test_cross_entropy_loss_basic():
-  """
-  Some simple tests to get you started.
-  Warning: these are not exhaustive.
-  """
-  y = np.array([[0, 1], [1, 0], [1, 0]])
-  yhat = np.array([[.5, .5], [.5, .5], [.5, .5]])
-
-  test1 = cross_entropy_loss(
-      tf.convert_to_tensor(y, dtype=tf.int32),
-      tf.convert_to_tensor(yhat, dtype=tf.float32))
-  with tf.Session():
-    test1 = test1.eval()
-  result = -3 * np.log(.5)
-  assert np.amax(np.fabs(test1 - result)) <= 1e-6
-  print "Basic (non-exhaustive) cross-entropy tests pass\n"
-
-
-if __name__ == "__main__":
-  test_cross_entropy_loss_basic()
