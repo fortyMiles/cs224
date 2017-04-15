@@ -147,7 +147,7 @@ class SoftmaxModel(Model):
 
     return yhat
 
-    
+
   def add_loss_op(self, pred):
     """Adds cross_entropy_loss ops to the computational graph.
 

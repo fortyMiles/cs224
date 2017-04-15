@@ -11,6 +11,14 @@ import data_utils.ner as ner
 from utils import data_iterator
 from model import LanguageModel
 
+import matplotlib
+matplotlib.use('TkAgg')
+import matplotlib.pyplot as plt
+import seaborn
+
+from sklearn.model_selection import train_test_split
+
+
 
 class Config(object):
   """Holds model hyperparams and data information.
@@ -20,14 +28,14 @@ class Config(object):
   instantiation.
   """
   embed_size = 50
-  batch_size = 64
+  batch_size = 128
   label_size = 5
-  hidden_size = 100
-  max_epochs = 24 
-  early_stopping = 2
-  dropout = 0.9
-  lr = 0.001
-  l2 = 0.001
+  hidden_size = [80, 80]
+  max_epochs = 50
+  early_stopping = 10
+  dropout = 0.7
+  lr = 0.5e-5
+  l2 = 1e-4
   window_size = 3
 
 
@@ -103,7 +111,7 @@ class NERModel(LanguageModel):
                                              shape=(None, self.config.label_size),
                                              name='labels')
 
-    self.dropout_placeholder = tf.placeholder(dtype=tf.float32, shape=(1,))
+    self.dropout_placeholder = tf.placeholder(dtype=tf.float32, shape=())
 
 
     ### END YOUR CODE
@@ -201,20 +209,57 @@ class NERModel(LanguageModel):
       output: tf.Tensor of shape (batch_size, label_size)
     """
 
-    with tf.variable_scope('Layer') as scope:
-        shape = (self.config.window_size * self.config.embed_size, self.config.hidden_size)
-        self.W = tf.Variable(xavier_weight_init()(shape).initialized_value())
-        self.b1 = tf.Variable(tf.zeros(shape=(self.config.hidden_size,), dtype=tf.float32))
+    window = tf.cast(window, tf.float32)
+
+    with tf.variable_scope('Input_Layer') as scope:
+        shape = (self.config.window_size * self.config.embed_size, self.config.hidden_size[0])
+        # self.W1 = tf.get_variable('w1', shape=shape, initializer=xavier_weight_init())
+
+        self.W1 = tf.Variable(xavier_weight_init()(shape).initialized_value())
+        self.b1 = tf.Variable(tf.zeros(shape=(self.config.hidden_size[0],), dtype=tf.float32))
+        # self.b1 = tf.get_variable('b1', shape=(self.config.hidden_size[0]), initializer=tf.constant_initializer(0.0))
+
+    layer_output_1 = tf.tanh(tf.matmul(window, self.W1) + self.b1)
+    layer_output_1 = tf.nn.dropout(layer_output_1, keep_prob=self.config.dropout)
+
+    with tf.variable_scope('hidden_1') as scope:
+        shape = (self.config.hidden_size[0], self.config.hidden_size[1])
+        self.W2 = tf.Variable(xavier_weight_init()(shape).initialized_value())
+        self.b2 = tf.Variable(tf.zeros(shape=(self.config.hidden_size[1]), dtype=tf.float32))
+
+    #layer_output_2 = tf.nn.relu(tf.matmul(layer_output_1, self.W2) + self.b2)
+    #layer_output_2 = tf.nn.dropout(layer_output_2, keep_prob=self.config.dropout)
+
+    # with tf.variable_scope('hidden_2') as scope:
+    #     shape = (self.config.hidden_size[1], self.config.hidden_size[2])
+    #     self.W3 = tf.Variable(xavier_weight_init()(shape).initialized_value())
+    #     self.b3 = tf.Variable(tf.zeros(shape=(self.config.hidden_size[2]), dtype=tf.float32))
+    #
+    # layer_output_3 = tf.tanh(tf.matmul(layer_output_2, self.W3) + self.b3)
+    # layer_output_3 = tf.nn.dropout(layer_output_3, keep_prob=self.config.dropout)
+
+    # with tf.variable_scope('hidden_4') as scope:
+    #     shape = (self.config.hidden_size[2], self.config.hidden_size[3])
+    #     self.W3 = tf.Variable(xavier_weight_init()(shape).initialized_value())
+    #     self.b3 = tf.Variable(tf.zeros(shape=(self.config.hidden_size[2]), dtype=tf.float32))
+    #
+    # layer_output_3 = tf.nn.relu(tf.matmul(layer_output_2, self.W3) + self.b3)
+    # layer_output_3 = tf.nn.tanh(layer_output_3)
 
     with tf.variable_scope('Softmax') as softmax_scope:
-        xavier_initializer = xavier_weight_init()
-        u_shape = (self.config.hidden_size, self.config.label_size)
-        self.U = tf.Variable(xavier_initializer(u_shape).initialized_value())
-        self.b2 = tf.Variable(tf.zeros(shape=(self.config.label_size)), dtype=tf.float32)
+        u_shape = (self.config.hidden_size[0], self.config.label_size)
+        # self.U = tf.get_variable('u', shape=u_shape, initializer=xavier_weight_init().init)
+        # self.b3 = tf.get_variable('b3', shape=[self.config.label_size], initializer=tf.constant_initializer(0.0), dtype=tf.float32)
+        self.U = tf.Variable(xavier_weight_init()(u_shape).initialized_value())
+        self.b3 = tf.Variable(tf.zeros(shape=(self.config.label_size)))
 
-    window = tf.cast(window, tf.float32)
-    h = tf.tanh(tf.matmul(window, self.W) + self.b1)
-    output = tf.nn.softmax(tf.matmul(h, self.U) + self.b2)
+    output = tf.nn.softmax(tf.matmul(layer_output_1, self.U) + self.b3)
+
+    loss_paramters = [self.W1, self.b1, self.b3, self.U]
+
+    l2_loss = sum(map(lambda p: tf.nn.l2_loss(p), loss_paramters))
+
+    tf.add_to_collection(name='l2_loss', value=l2_loss)
 
     ### END YOUR CODE
     return output 
@@ -233,7 +278,7 @@ class NERModel(LanguageModel):
 
     loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(labels=self.labels_placeholder, logits=y))
 
-    loss += self.config.l2 / 2 * (tf.reduce_sum(self.W * self.W) + tf.reduce_sum(self.U * self.U))
+    loss += self.config.l2 * tf.get_collection('l2_loss')[0]
 
     return loss
 
@@ -258,7 +303,11 @@ class NERModel(LanguageModel):
     """
     ### YOUR CODE HERE
 
-    train_op = tf.train.AdadeltaOptimizer(learning_rate=self.config.lr).minimize(loss=loss)
+    global_step = tf.Variable(0, trainable=True)
+    starter_learning_rate = self.config.lr
+    learning_rate = tf.train.exponential_decay(starter_learning_rate, global_step,
+                                               10000, 0.96, staircase=True)
+    train_op = tf.train.AdamOptimizer(learning_rate=self.config.lr).minimize(loss=loss, global_step=global_step)
     ### END YOUR CODE
     return train_op
 
@@ -361,17 +410,41 @@ def save_predictions(predictions, filename):
     for prediction in predictions:
       f.write(str(prediction) + "\n")
 
-def test_NER():
+def NER_dev():
   """Test NER model implementation.
 
   You can use this function to test your implementation of the Named Entity
   Recognition network. When debugging, set max_epochs in the Config object to 1
   so you can rapidly iterate.
   """
-  config = Config()
-  with tf.Graph().as_default():
-    model = NERModel(config)
 
+
+  train_loss_his = []
+  train_acc_his = []
+  valid_acc_his = []
+  valid_loss_his = []
+
+  train_hist = {
+      'train_loss': train_loss_his,
+      'train_acc': train_acc_his,
+      'valid_loss': valid_loss_his,
+      'valid_acc': valid_acc_his
+
+  }
+
+
+  with tf.Graph().as_default():
+
+    config = Config()
+    ratio = 0.3  # train ratio, set small when test hyper tuning
+
+    model = NERModel(config)
+    total_train_num = int(len(model.X_train) * ratio)
+    dev_data_set_indices = np.random.choice(range(len(model.X_train)), total_train_num, replace=True)
+
+    X_train, X_test, y_train, y_test = train_test_split(model.X_train[dev_data_set_indices],
+                                                          model.y_train[dev_data_set_indices],
+                                                          test_size=0.25, random_state=0)
     init = tf.global_variables_initializer()
     saver = tf.train.Saver()
 
@@ -383,13 +456,25 @@ def test_NER():
       for epoch in xrange(config.max_epochs):
         print 'Epoch {}'.format(epoch)
         start = time.time()
-        ###
-        train_loss, train_acc = model.run_epoch(session, model.X_train,
-                                                model.y_train)
-        val_loss, predictions = model.predict(session, model.X_dev, model.y_dev)
+        ###p
+
+        train_loss, train_acc = model.run_epoch(session, X_train,
+                                                y_train)
+
+        val_loss, predictions = model.predict(session, X_test, y_test)
+
+        val_acc = np.mean(predictions == y_test)
+
         print 'Training loss: {}'.format(train_loss)
         print 'Training acc: {}'.format(train_acc)
         print 'Validation loss: {}'.format(val_loss)
+        print 'Validation acc: {}'.format(val_acc)
+
+        train_loss_his.append(train_loss)
+        train_acc_his.append(train_acc)
+        valid_loss_his.append(val_loss)
+        valid_acc_his.append(val_acc)
+
         if val_loss < best_val_loss:
           best_val_loss = val_loss
           best_val_epoch = epoch
@@ -400,16 +485,40 @@ def test_NER():
         if epoch - best_val_epoch > config.early_stopping:
           break
         ###
-        confusion = calculate_confusion(config, predictions, model.y_dev)
-        print_confusion(confusion, model.num_to_tag)
+#        confusion = calculate_confusion(config, predictions, model.y_dev)
+ #       print_confusion(confusion, model.num_to_tag)
         print 'Total time: {}'.format(time.time() - start)
       
       saver.restore(session, './weights/ner.weights')
       print 'Test'
       print '=-=-='
       print 'Writing predictions to q2_test.predicted'
-      _, predictions = model.predict(session, model.X_test, model.y_test)
-      save_predictions(predictions, "q2_test.predicted")
+   #   _, predictions = model.predict(session, model.X_test, model.y_test)
+   #   save_predictions(predictions, "q2_test.predicted")
+
+      return train_hist
+
+
+def plot_train(train_hist):
+    plt.subplot(2, 1, 1)
+    train_acc = train_hist['train_acc']
+    valid_acc = train_hist['valid_acc']
+    x = range(len(train_acc))
+    plt.plot(x, train_acc, 'g-')
+    plt.plot(x, valid_acc, 'b-')
+    plt.title('Train(Green) and Valid(Blue) acc')
+
+
+    train_loss = train_hist['train_loss']
+    valid_loss = train_hist['valid_loss']
+    plt.subplot(2, 1, 2)
+    plt.plot(x, train_loss, 'g-')
+    plt.plot(x, valid_loss, 'b-')
+    plt.title('Train(Green) and Valid(Blue) loss')
+
+    plt.show()
 
 if __name__ == "__main__":
-  test_NER()
+    train_hist = NER_dev()
+    plot_train(train_hist)
+
