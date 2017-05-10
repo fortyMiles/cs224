@@ -87,6 +87,21 @@ def minibatch_parse(sentences, model, batch_size):
     ### YOUR CODE HERE
     ### END YOUR CODE
 
+    partial_parses = list(map(PartialParse, sentences))
+    unfinished_partial_parses = partial_parses
+
+    transitions = []
+
+    for i in range(0, len(unfinished_partial_parses), batch_size):
+        minibatch = unfinished_partial_parses[i:i+batch_size]
+
+        for pp in minibatch:
+            while not (len(pp.stack) == 1 and len(pp.buffer) == 0):
+                next_transitions = model.predict([pp])
+                pp.parse_step(next_transitions[0])
+
+    dependencies = list(map(lambda pp: pp.dependencies, partial_parses))
+
     return dependencies
 
 
@@ -107,7 +122,7 @@ def test_step(name, transition, stack, buf, deps,
     print("{:} test passed!".format(name))
 
 
-def test_parse_step():
+def A_test_parse_step():
     """Simple tests for the PartialParse.parse_step function
     Warning: these are not exhaustive
     """
@@ -151,7 +166,7 @@ def test_dependencies(name, deps, ex_deps):
         "{:} test resulted in dependency list {:}, expected {:}".format(name, deps, ex_deps)
 
 
-def test_minibatch_parse():
+def A_test_minibatch_parse():
     """Simple tests for the minibatch_parse function
     Warning: these are not exhaustive
     """
@@ -171,6 +186,6 @@ def test_minibatch_parse():
     print("minibatch_parse test passed!")
 
 if __name__ == '__main__':
-    test_parse_step()
+    A_test_parse_step()
     # test_parse()
-    # test_minibatch_parse()
+    A_test_minibatch_parse()
